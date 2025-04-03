@@ -8,10 +8,14 @@ export class TasksService {
     constructor(
         @InjectRepository(Task)
         private readonly tasksRepository: Repository<Task>,
-    ) {}
+    ) { }
 
-    async listTasks() {
-        const tasks = await this.tasksRepository.find();
+    async listTasks(userId: string) {
+        const tasks = await this.tasksRepository
+            .createQueryBuilder('task')
+            .leftJoinAndSelect('task.owner', 'owner')
+            .where('owner.id = :userId', { userId })
+            .getMany();
 
         return tasks;
     }
@@ -19,7 +23,8 @@ export class TasksService {
     async getTask(id: string) {
         const task = await this.tasksRepository
             .createQueryBuilder('task')
-            .where(`task.id = "${id}"`)
+            .leftJoinAndSelect("task.owner", "owner")
+            .where("task.id = :id", { id })
             .getOne();
 
         return task;
@@ -31,5 +36,17 @@ export class TasksService {
         const editedTask = await this.getTask(body.id);
 
         return editedTask;
+    }
+
+    async createTask(data: any, userId: string): Promise<Task> {
+        const task = this.tasksRepository.create({
+            title: data.title,
+            description: data.description,
+            done: false,
+            dueDate: data.dueDate,
+            owner: { id: userId },
+        });
+
+        return this.tasksRepository.save(task);
     }
 }
