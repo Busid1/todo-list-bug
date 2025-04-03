@@ -14,7 +14,7 @@ export class AuthGuard implements CanActivate {
     constructor(
         private jwtService: JwtService,
         private reflector: Reflector,
-    ) {}
+    ) { }
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
         const isPublic = this.reflector.getAllAndOverride<boolean>(
@@ -22,12 +22,12 @@ export class AuthGuard implements CanActivate {
             [context.getHandler(), context.getClass()],
         );
         if (isPublic) {
-            // 💡 See this condition
             return true;
         }
 
-        const request = context.switchToHttp().getRequest();
+        const request = context.switchToHttp().getRequest<Request>();
         const token = this.extractTokenFromHeader(request);
+
         if (!token) {
             throw new UnauthorizedException("TOKEN NO VALIDO");
         }
@@ -35,18 +35,23 @@ export class AuthGuard implements CanActivate {
             const payload = await this.jwtService.verifyAsync(token, {
                 secret: jwtConstants.secret,
             });
-            // 💡 We're assigning the payload to the request object here
-            // so that we can access it in our route handlers
+
             request['user'] = payload;
-        } catch(error) {
-            throw new UnauthorizedException("TOKEN INVALIDO O EXPIRADO");
+        } catch (error) {
+            if (error.name === 'TokenExpiredError') {
+                throw new UnauthorizedException('El token ha expirado, por favor inicia sesión nuevamente');
+            } else if (error.name === 'JsonWebTokenError') {
+                throw new UnauthorizedException('El token es inválido');
+            } else {
+                throw new UnauthorizedException('Error en la autenticación');
+            }
         }
+
         return true;
     }
 
     private extractTokenFromHeader(request: Request): string | undefined {
-        const [type, token] =
-            request.headers['authorization']?.split(' ') ?? [];
+        const [type, token] = request.headers['authorization']?.split(' ') ?? [];
         return type === 'Bearer' ? token : undefined;
     }
 }
